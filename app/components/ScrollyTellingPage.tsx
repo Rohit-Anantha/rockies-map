@@ -6,17 +6,19 @@ import Map, {
   Layer,
   NavigationControl,
   Marker,
-  Popup,
 } from "react-map-gl/maplibre";
 import { AnimatePresence, motion } from "framer-motion";
 import "maplibre-gl/dist/maplibre-gl.css";
 import rawRouteData from "../../public/t4k_route_weather.json";
 import bbox from "@turf/bbox";
 import { journalEntries } from "./journal";
-import { Odometer } from "./Odometer";
 
 import { Camera } from "lucide-react";
 import { JournalEntry } from "./JournalDay";
+import { PhotoPopup } from "./PhotoPopup";
+import { StatsHUD } from "./StatsHUD";
+import { SidebarHeader } from "./SidebarHeader";
+import { AuthOverlay } from "./AuthOverlay";
 
 export interface RoutePhoto {
   id: string;
@@ -62,17 +64,20 @@ export default function ScrollytellingPage({
 }: {
   photos?: RoutePhoto[];
 }) {
+  const [isAuthenticated, setIsAuthenticated] = useState(false);
+  const [passwordInput, setPasswordInput] = useState("");
   const mapRef = useRef<MapRef>(null);
   const [activeDay, setActiveDay] = useState("1");
   const [selectedPhoto, setSelectedPhoto] = useState<RoutePhoto | null>(null);
-
-  // LOCK MECHANISM: Prevents map from jumping during manual scrubs
-  const isManualScroll = useRef(false);
+  const scrollContainerRef = useRef<HTMLDivElement>(null);
+  const activeDayRef = useRef(activeDay);
   const scrollTimeout = useRef<NodeJS.Timeout | null>(null);
+  const selectedPhotoRef = useRef<RoutePhoto | null>(null);
 
   const updateMapAndUI = useCallback((dayId: string, duration: number) => {
     setActiveDay(dayId);
     const feature = featuresByDay[dayId];
+    const isMobile = window.innerWidth < 768;
 
     if (feature && mapRef.current) {
       const [minX, minY, maxX, maxY] = bbox(feature as any);
@@ -82,30 +87,44 @@ export default function ScrollytellingPage({
           [maxX, maxY],
         ],
         {
-          padding: { top: 100, bottom: 100, left: 450, right: 100 },
+          padding: isMobile
+            ? { top: 40, bottom: 40, left: 40, right: 40 } // Balanced for mobile
+            : { top: 100, bottom: 100, left: 450, right: 100 }, // Desktop sidebar offset
           duration: duration,
         },
       );
     }
   }, []);
 
+  useEffect(() => {
+    selectedPhotoRef.current = selectedPhoto;
+  }, [selectedPhoto]);
+
+  useEffect(() => {
+    activeDayRef.current = activeDay;
+  }, [activeDay]);
+
+  // Update your onIntersect logic
   const onIntersect = useCallback(
     (entries: IntersectionObserverEntry[]) => {
+      // Check the REF, not the state
+      if (selectedPhotoRef.current) return;
+
       entries.forEach((entry) => {
-        if (entry.isIntersecting && entry.intersectionRatio > 0.5) {
+        if (entry.isIntersecting) {
           const dayId = entry.target.getAttribute("data-day");
-          if (dayId && dayId !== activeDay && !isManualScroll.current) {
+          if (dayId && dayId !== activeDayRef.current) {
+            setActiveDay(dayId);
             updateMapAndUI(dayId, 2000);
           }
         }
       });
     },
-    [updateMapAndUI],
+    [updateMapAndUI], // selectedPhoto is no longer a dependency, preventing re-binds
   );
 
   const scrollToDay = useCallback(
     (day: string) => {
-      isManualScroll.current = true;
       updateMapAndUI(day, 1000); // Faster map jump
 
       const element = document.querySelector(`[data-day="${day}"]`);
@@ -114,21 +133,31 @@ export default function ScrollytellingPage({
       }
 
       if (scrollTimeout.current) clearTimeout(scrollTimeout.current);
-      scrollTimeout.current = setTimeout(() => {
-        isManualScroll.current = false;
-      }, 1200);
+      scrollTimeout.current = setTimeout(() => {}, 1200);
     },
     [updateMapAndUI],
   );
 
   useEffect(() => {
-    const observer = new IntersectionObserver(onIntersect, { threshold: 0.6 });
-    document
-      .querySelectorAll(".day-section")
-      .forEach((s) => observer.observe(s));
-    return () => observer.disconnect();
-  }, [onIntersect]);
+    if (!scrollContainerRef.current) return;
 
+    const isMobile = window.innerWidth < 768;
+
+    const observer = new IntersectionObserver(onIntersect, {
+      root: scrollContainerRef.current,
+      /* MOBILE: Trigger when the day is anywhere in the top 40% of the bar.
+       DESKTOP: Trigger when the day is in the middle 30% of the sidebar.
+    */
+      rootMargin: isMobile ? "-5% 0px -60% 0px" : "-25% 0px -45% 0px",
+      threshold: [0, 0.1, 0.2], // Multiple thresholds make it more responsive to fast scrolls
+    });
+
+    // Re-observe whenever the component re-renders or auth changes
+    const elements = document.querySelectorAll(".day-section");
+    elements.forEach((s) => observer.observe(s));
+
+    return () => observer.disconnect();
+  }, [onIntersect, isAuthenticated]); // Added isAuthenticated to ensure it runs after login
   const activeDayNum = parseInt(activeDay) || 0;
 
   // Totals Calculation
@@ -146,48 +175,56 @@ export default function ScrollytellingPage({
     );
   }, [activeDayNum]);
 
-  // Get the currently visible photos (up to the active day)
-  const visiblePhotos = useMemo(() => {
-    return photos.filter((p) => Number(p.day) <= activeDayNum);
-  }, [photos, activeDayNum]);
-
+  // Photo Navigation
   const navigatePhoto = useCallback(
     (direction: "next" | "prev") => {
-      // Use a functional update or ensure selectedPhoto is in the dependency array
       setSelectedPhoto((current) => {
         if (!current) return null;
 
-        const visiblePhotos = photos.filter(
-          (p) => Number(p.day) <= activeDayNum,
-        );
-        const currentIndex = visiblePhotos.findIndex(
-          (p) => p.id === current.id,
-        );
+        const currentDay = parseInt(activeDayRef.current) || 0;
+        const filtered = photos.filter((p) => Number(p.day) <= currentDay);
+        const currentIndex = filtered.findIndex((p) => p.id === current.id);
 
         if (currentIndex === -1) return current;
 
-        let newIndex;
-        if (direction === "next") {
-          newIndex = (currentIndex + 1) % visiblePhotos.length;
-        } else {
-          newIndex =
-            (currentIndex - 1 + visiblePhotos.length) % visiblePhotos.length;
-        }
+        let newIndex =
+          direction === "next"
+            ? (currentIndex + 1) % filtered.length
+            : (currentIndex - 1 + filtered.length) % filtered.length;
 
-        const nextPhoto = visiblePhotos[newIndex];
+        const nextPhoto = filtered[newIndex];
+        const isMobile = window.innerWidth < 768;
 
-        // Optional: Move the map to the new photo location
+        // Apply padding so the marker is centered in the VISIBLE area
         mapRef.current?.flyTo({
           center: nextPhoto.coordinates,
-          padding: { top: 50, bottom: 50, left: 450, right: 50 },
+          zoom: 12,
+          padding: isMobile
+            ? { top: 50, bottom: window.innerHeight * 0.6, left: 20, right: 20 }
+            : { top: 50, bottom: 50, left: 450, right: 50 },
           duration: 800,
         });
 
         return nextPhoto;
       });
     },
-    [photos, activeDayNum],
+    [photos],
   );
+
+  const closePhotoAndResetMap = useCallback(() => {
+    setSelectedPhoto(null);
+
+    if (mapRef.current) {
+      const map = mapRef.current.getMap();
+      map.stop(); // This kills the photo's flyTo animation immediately
+
+      // We wrap the update in a tiny timeout to let the React state
+      // for 'selectedPhoto' clear, ensuring the observer doesn't fight it.
+      setTimeout(() => {
+        updateMapAndUI(activeDayRef.current, 1200);
+      }, 10);
+    }
+  }, [updateMapAndUI]);
 
   useEffect(() => {
     if (!selectedPhoto && mapRef.current) {
@@ -199,96 +236,21 @@ export default function ScrollytellingPage({
     }
   }, [selectedPhoto]);
 
-  const closePhotoAndResetMap = useCallback(() => {
-    setSelectedPhoto(null);
-
-    // Trigger the scrollytelling zoom for the current day
-    // We use the same function your scroll observer uses
-    updateMapAndUI(activeDay, 1500);
-  }, [activeDay, updateMapAndUI]);
-
   return (
-    <div className="flex flex-col md:flex-row min-h-screen bg-slate-50 font-sans selection:bg-orange-100">
-      {/* LEFT SIDEBAR */}
-      <div className="w-full md:w-1/3 bg-white/80 backdrop-blur-md z-10 shadow-2xl flex flex-col h-screen border-r border-slate-200">
-        {/* Header Section */}
-        <div className="p-8 pb-4">
-          <motion.h1
-            initial={{ opacity: 0, x: -20 }}
-            animate={{ opacity: 1, x: 0 }}
-            className="text-4xl font-black mb-1 tracking-tighter uppercase italic text-slate-900"
-          >
-            Texas 4000
-          </motion.h1>
-          <p className="text-slate-400 font-bold text-[10px] uppercase tracking-[0.3em]">
-            Austin → Anchorage
-          </p>
-        </div>
-        {/* Floating Style Dashboard */}
-        <div className="px-6 py-4 mx-4 mb-4 rounded-3xl bg-white border border-slate-100 shadow-sm">
-          <div className="flex justify-between items-end mb-6">
-            <div>
-              <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest mb-1">
-                Timeline
-              </p>
-              <p className="text-2xl font-black text-slate-900 italic">
-                Day {activeDay}
-              </p>
-            </div>
-            <div className="text-right">
-              <span className="text-[10px] font-bold text-orange-600 bg-orange-50 px-3 py-1 rounded-full uppercase">
-                {Math.round((activeDayNum / 70) * 100)}% Complete
-              </span>
-            </div>
-          </div>
-
-          {/* Range Slider Scrubber */}
-          <div className="relative group px-1">
-            <input
-              type="range"
-              min="1"
-              max="70"
-              value={activeDayNum}
-              onChange={(e) => scrollToDay(e.target.value)}
-              className="w-full h-1.5 bg-slate-100 rounded-full appearance-none cursor-pointer accent-orange-600 transition-all hover:h-2"
-              aria-label="Timeline scrubber"
-            />
-
-            <div className="flex justify-between mt-2 px-0.5 pointer-events-none">
-              {[0, 25, 50, 75, 100].map((p) => (
-                <div
-                  key={p}
-                  className="text-[8px] font-bold text-slate-300 uppercase"
-                >
-                  {p}%
-                </div>
-              ))}
-            </div>
-          </div>
-        </div>
-        {/* Scrollable Journal */}
-        <div className="overflow-y-auto grow p-8 pt-4 no-scrollbar space-y-[40vh] pb-[60vh]">
-          {Array.from({ length: 70 }, (_, i) => i + 1).map((dayNum) => {
-            const d = String(dayNum);
-            return (
-              <JournalEntry
-                key={d}
-                day={d}
-                isActive={activeDay === d}
-                geoProps={featuresByDay[d]?.properties}
-                entry={journalEntries[d]}
-                prevEntry={journalEntries[String(dayNum - 1)]}
-                isFirstDay={dayNum === 1}
-              />
-            );
-          })}
-        </div>
-      </div>
-
-      {/* RIGHT SIDE: Map */}
-      <div className="w-full md:w-2/3 h-[50vh] md:h-screen sticky top-0 bg-slate-100">
+    <div className="fixed inset-0 overflow-hidden bg-slate-50 font-sans selection:bg-orange-100">
+      <AuthOverlay
+        isAuthenticated={isAuthenticated}
+        onAuth={(val) => {
+          setPasswordInput(val);
+          if (val.trim().toLowerCase() === "whatever the weather")
+            setIsAuthenticated(true);
+        }}
+      />
+      {/* MAP CONTAINER */}
+      <div className="absolute top-0 left-0 w-full h-[45vh] md:left-auto md:right-0 md:w-2/3 md:h-full z-0 bg-slate-100">
         <Map
           ref={mapRef}
+          cooperativeGestures={true}
           initialViewState={{ longitude: -97.74, latitude: 30.26, zoom: 5 }}
           mapStyle="https://api.maptiler.com/maps/dataviz-light/style.json?key=XCPlLU3aHjY0DmwHehir"
         >
@@ -342,7 +304,6 @@ export default function ScrollytellingPage({
                   setSelectedPhoto(photo); // Open the popup directly
                   mapRef.current?.flyTo({
                     center: [photo.coordinates[0], photo.coordinates[1]],
-                    offset: [0, -100], // Shift the center down so the popup (which opens 'top') stays in view
                     zoom: 12, // Optional: zoom in a bit for a closer look
                     duration: 1000,
                   });
@@ -356,131 +317,47 @@ export default function ScrollytellingPage({
                 </div>
               </Marker>
             ))}
-
-          {/* Large Carousel Popup */}
           {selectedPhoto && (
-            <Popup
-              longitude={selectedPhoto.coordinates[0]}
-              latitude={selectedPhoto.coordinates[1]}
-              anchor="center"
-              onClose={() => closePhotoAndResetMap()}
-              closeOnClick={false}
-              closeButton={false} // We'll use our own close button
-              className="z-50 glass-popup"
-              maxWidth="450px"
-              offset={20}
-            >
-              <div className="group relative rounded-2xl bg-white/30 backdrop-blur-xl border border-white/40 shadow-2xl overflow-hidden ring-1 ring-black/5 flex flex-col">
-                {/* Navigation Overlay (Visible on Hover) */}
-                <div className="absolute inset-0 flex items-center justify-between px-4 opacity-0 group-hover:opacity-100 transition-opacity z-20 pointer-events-none">
-                  <button
-                    onClick={(e) => {
-                      e.stopPropagation();
-                      navigatePhoto("prev");
-                    }}
-                    className="pointer-events-auto bg-white/80 hover:bg-white text-slate-900 p-2 rounded-full shadow-lg backdrop-blur-md transition-all active:scale-90"
-                  >
-                    ←
-                  </button>
-                  <button
-                    onClick={(e) => {
-                      e.stopPropagation();
-                      navigatePhoto("next");
-                    }}
-                    className="pointer-events-auto bg-white/80 hover:bg-white text-slate-900 p-2 rounded-full shadow-lg backdrop-blur-md transition-all active:scale-90"
-                  >
-                    →
-                  </button>
-                </div>
-
-                {/* Large Image Container */}
-                <div className="relative h-[300px] w-full">
-                  <img
-                    src={selectedPhoto.url}
-                    alt={selectedPhoto.caption}
-                    className="w-full h-full object-cover"
-                  />
-                  {/* Close Button */}
-                  <button
-                    onClick={() => closePhotoAndResetMap()}
-                    className="absolute top-3 right-3 bg-black/30 hover:bg-black/60 text-white rounded-full p-1.5 backdrop-blur-md transition-colors z-30"
-                  >
-                    <svg
-                      width="14"
-                      height="14"
-                      viewBox="0 0 24 24"
-                      fill="none"
-                      stroke="currentColor"
-                      strokeWidth="3"
-                    >
-                      <path d="M18 6L6 18M6 6l12 12" />
-                    </svg>
-                  </button>
-                </div>
-
-                {/* Photo Info Footer */}
-                <div className="p-4 flex flex-col">
-                  <div className="flex items-center gap-2 mb-1">
-                    <span className="text-[10px] font-black bg-orange-500 text-white px-2 py-0.5 rounded-md">
-                      DAY {selectedPhoto.day}
-                    </span>
-                    <span className="text-[10px] font-bold text-slate-500 uppercase tracking-widest">
-                      {selectedPhoto.id}
-                    </span>
-                  </div>
-                  <p className="text-sm font-bold text-slate-900 leading-tight">
-                    {selectedPhoto.caption || "Texas 4000 Moment"}
-                  </p>
-                </div>
-              </div>
-            </Popup>
+            <PhotoPopup
+              selectedPhoto={selectedPhoto} // TS now knows this is a RoutePhoto
+              onClose={closePhotoAndResetMap}
+              onNavigate={navigatePhoto}
+            />
           )}
           <NavigationControl position="top-right" />
         </Map>
+        <StatsHUD miles={totals.miles} elevation={totals.elevation} />
+      </div>
 
-        {/* Floating Stats HUD */}
-        <motion.div
-          layout
-          className="absolute bottom-10 left-10 z-30 bg-white/60 backdrop-blur-md px-6 py-4 rounded-[2.5rem] border border-slate-200 shadow-xl"
+      {/* SIDEBAR CONTAINER */}
+      <div className="absolute bottom-0 left-0 w-full h-[60vh] md:top-0 md:h-full md:w-1/3 z-20 flex flex-col bg-white/80 backdrop-blur-md md:border-r border-slate-200 rounded-t-3xl md:rounded-none shadow-[0_-10px_40px_-15px_rgba(0,0,0,0.1)] md:shadow-2xl">
+        {/* Fixed Header & Slider Section */}
+        <SidebarHeader
+          activeDay={activeDay}
+          activeDayNum={activeDayNum}
+          onScrollToDay={scrollToDay}
+        />
+        {/* Scrollable Journal */}
+        <div
+          ref={scrollContainerRef}
+          className="flex-1 overflow-y-auto p-6 md:p-8 pt-2 md:pt-4 no-scrollbar space-y-[30vh] md:space-y-[40vh] pb-[40vh] md:pb-[60vh] overscroll-contain overflow-x-hidden"
         >
-          <div className="flex items-center gap-8">
-            <div>
-              <p className="text-[9px] font-bold uppercase tracking-[0.15em] text-slate-500 mb-0.5">
-                Cumulative Miles
-              </p>
-              <div className="flex items-baseline gap-1">
-                <div className="text-3xl">
-                  <Odometer
-                    value={totals.miles.toFixed(1)}
-                    colorClass="text-slate-900"
-                  />
-                </div>
-                <span className="text-xs font-bold text-slate-400 uppercase">
-                  mi
-                </span>
+          {Array.from({ length: 70 }, (_, i) => i + 1).map((dayNum) => {
+            const d = String(dayNum);
+            return (
+              <div key={d} data-day={d} className="day-section">
+                <JournalEntry
+                  day={d}
+                  isActive={activeDay === d}
+                  geoProps={featuresByDay[d]?.properties}
+                  entry={journalEntries[d]}
+                  prevEntry={journalEntries[String(dayNum - 1)]}
+                  isFirstDay={dayNum === 1}
+                />
               </div>
-            </div>
-
-            <div className="w-px h-8 bg-slate-300/50" />
-
-            <div>
-              <p className="text-[9px] font-bold uppercase tracking-[0.15em] text-slate-500 mb-0.5">
-                Total Elevation
-              </p>
-              <div className="flex items-baseline gap-1">
-                <div className="text-3xl">
-                  <Odometer
-                    value={Math.floor(totals.elevation)}
-                    colorClass="text-orange-600"
-                  />
-                </div>
-                <span className="text-xs font-bold text-orange-400 uppercase">
-                  ft
-                </span>
-              </div>
-            </div>
-          </div>
-        </motion.div>
+            );
+          })}
+        </div>
       </div>
     </div>
   );

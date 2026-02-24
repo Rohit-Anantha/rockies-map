@@ -74,11 +74,10 @@ export const JournalEntry = memo(
           x: isActive ? 0 : -20,
         }}
         transition={{ duration: 0.5 }}
-        className="day-section"
       >
         {/* Date & Day Label */}
         <div className="flex items-center justify-between mb-2">
-          <span className="text-[10px] font-black tracking-[0.2em] uppercase text-orange-500">
+            <span className="text-[10px] font-black tracking-[0.2em] uppercase text-orange-500">
             Day {day} • {formattedDate}
           </span>
           {entry?.isRestDay && (

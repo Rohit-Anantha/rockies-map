@@ -18,5 +18,15 @@
     ],
     "url": "/photos/display/Ride Launch.webp",
     "caption": "Ride Launch.jpeg"
+  },
+  {
+    "id": "Round Rock Donuts",
+    "day": "1",
+    "coordinates": [
+      -97.67967222222222,
+      30.509125
+    ],
+    "url": "/photos/display/Round Rock Donuts.webp",
+    "caption": "Round Rock Donuts.jpeg"
   }
 ]
