@@ -35,7 +35,7 @@ export const PhotoPopup = ({
           animate={{ scale: 1, opacity: 1, y: 0 }}
           exit={{ scale: 0.95, opacity: 0, y: 20 }}
           transition={{ type: "spring", damping: 25, stiffness: 300 }}
-          className="relative z-10 flex flex-col overflow-hidden border border-white/20 shadow-2xl rounded-3xl w-auto max-w-full max-h-[90vh]"
+          className="relative z-150 flex flex-col overflow-hidden border border-white/20 shadow-2xl rounded-3xl w-auto max-w-full max-h-[90vh]"
         >
           {/* Close Button */}
           <button

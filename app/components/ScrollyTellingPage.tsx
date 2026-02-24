@@ -75,27 +75,86 @@ export default function ScrollytellingPage({
   const selectedPhotoRef = useRef<RoutePhoto | null>(null);
   const isManualScrolling = useRef(false);
 
-  const updateMapAndUI = useCallback((dayId: string, duration: number) => {
-    setActiveDay(dayId);
-    const feature = featuresByDay[dayId];
-    const isMobile = window.innerWidth < 768;
+  const updateMapAndUI = useCallback(
+    (dayId: string, duration: number) => {
+      if (!dayId || !mapRef.current) return;
 
-    if (feature && mapRef.current) {
+      const feature = featuresByDay[dayId];
+      if (!feature) return;
+
+      const map = mapRef.current.getMap();
+      const canvas = map.getCanvas();
+      const isMobile = window.innerWidth < 768;
+
+      // 1. Get the Bounding Box
       const [minX, minY, maxX, maxY] = bbox(feature as any);
-      mapRef.current.fitBounds(
-        [
-          [minX, minY],
-          [maxX, maxY],
-        ],
-        {
-          padding: isMobile
-            ? { top: 40, bottom: 40, left: 40, right: 40 } // Balanced for mobile
-            : { top: 100, bottom: 100, left: 450, right: 100 }, // Desktop sidebar offset
-          duration: duration,
-        },
+      const center: [number, number] = [(minX + maxX) / 2, (minY + maxY) / 2];
+
+      // 2. Calculate the required Zoom level for the bounding box
+      // This helper replaces the glitchy fitBounds behavior
+      const getBoundsZoom = (
+        west: number,
+        south: number,
+        east: number,
+        north: number,
+      ) => {
+        const WORLD_DIM = { height: 256, width: 256 };
+        const ZOOM_MAX = 21;
+
+        function latRad(lat: number) {
+          const sin = Math.sin((lat * Math.PI) / 180);
+          const radX2 = Math.log((1 + sin) / (1 - sin)) / 2;
+          return Math.max(Math.min(radX2, Math.PI), -Math.PI) / 2;
+        }
+
+        function zoom(mapPx: number, worldPx: number, fraction: number) {
+          return Math.floor(Math.log(mapPx / worldPx / fraction) / Math.LN2);
+        }
+
+        const latFraction = (latRad(north) - latRad(south)) / Math.PI;
+        const lngDiff = east - west;
+        const lngFraction = (lngDiff < 0 ? lngDiff + 360 : lngDiff) / 360;
+
+        const latZoom = zoom(
+          canvas.clientHeight,
+          WORLD_DIM.height,
+          latFraction,
+        );
+        const lngZoom = zoom(canvas.clientWidth, WORLD_DIM.width, lngFraction);
+        const paddingFactor = isMobile ? 0.25 : 0.25;
+
+        return Math.min(latZoom, lngZoom, ZOOM_MAX) - paddingFactor;
+      };
+
+      // Subtract 1 or 2 from the calculated zoom for "padding"
+      const calculatedZoom = Math.max(
+        0,
+        getBoundsZoom(minX, minY, maxX, maxY) - 1,
       );
-    }
-  }, []);
+
+      // 3. Offset Logic (Your existing code)
+      let offset: [number, number] = [0, 0];
+      if (isMobile) {
+        const visibleHeight = canvas.clientHeight * 0.45;
+        offset = [0, -(canvas.clientHeight / 2 - visibleHeight / 2)];
+      } else {
+        const sidebarWidth = canvas.clientWidth / 3;
+        offset = [sidebarWidth / 2, 0];
+      }
+
+      // Update state ONLY if it's different to prevent loops
+      setActiveDay((prev) => (prev !== dayId ? dayId : prev));
+
+      map.easeTo({
+        center: center,
+        zoom: Math.min(calculatedZoom, 15), // Cap zoom so it doesn't dive into the ground
+        offset: offset,
+        duration: duration,
+        essential: true,
+      });
+    },
+    [featuresByDay],
+  ); // Ensure dependencies are correct
 
   useEffect(() => {
     selectedPhotoRef.current = selectedPhoto;
@@ -109,11 +168,18 @@ export default function ScrollytellingPage({
   const onIntersect = useCallback(
     (entries: IntersectionObserverEntry[]) => {
       // Check the REF, not the state
-      if (selectedPhotoRef.current || isManualScrolling.current) return;
+      if (selectedPhotoRef.current || isManualScrolling.current) {
+        console.log("Observer Blocked:", {
+          photoOpen: !!selectedPhotoRef.current,
+          manualScroll: isManualScrolling.current,
+        });
+        return;
+      }
 
       entries.forEach((entry) => {
         if (entry.isIntersecting) {
           const dayId = entry.target.getAttribute("data-day");
+          console.log("Intersection Detected:", dayId);
           if (dayId && dayId !== activeDayRef.current) {
             setActiveDay(dayId);
             updateMapAndUI(dayId, 2000);
@@ -205,8 +271,8 @@ export default function ScrollytellingPage({
           center: nextPhoto.coordinates,
           zoom: 12,
           padding: isMobile
-            ? { top: 50, bottom: window.innerHeight * 0.6, left: 20, right: 20 }
-            : { top: 50, bottom: 50, left: 450, right: 50 },
+            ? { top: 50, bottom: 100, left: 20, right: 20 } // Changed from 0.6 height
+            : { top: 50, bottom: 50, left: 480, right: 50 },
           duration: 800,
         });
 
@@ -217,17 +283,20 @@ export default function ScrollytellingPage({
   );
 
   const closePhotoAndResetMap = useCallback(() => {
+    if (!selectedPhotoRef.current) return;
+
     setSelectedPhoto(null);
+    selectedPhotoRef.current = null;
+    isManualScrolling.current = false;
 
     if (mapRef.current) {
       const map = mapRef.current.getMap();
-      map.stop(); // This kills the photo's flyTo animation immediately
+      map.stop(); // Kill the high-zoom photo flyTo
 
-      // We wrap the update in a tiny timeout to let the React state
-      // for 'selectedPhoto' clear, ensuring the observer doesn't fight it.
-      setTimeout(() => {
+      requestAnimationFrame(() => {
+        // Transition from Zoom 12 (Photo) back to Zoom 10 (Route)
         updateMapAndUI(activeDayRef.current, 1200);
-      }, 10);
+      });
     }
   }, [updateMapAndUI]);
 
@@ -340,13 +409,6 @@ export default function ScrollytellingPage({
                 </div>
               </Marker>
             ))}
-          {selectedPhoto && (
-            <PhotoPopup
-              selectedPhoto={selectedPhoto} // TS now knows this is a RoutePhoto
-              onClose={closePhotoAndResetMap}
-              onNavigate={navigatePhoto}
-            />
-          )}
           <NavigationControl position="top-right" />
         </Map>
         <StatsHUD miles={totals.miles} elevation={totals.elevation} />
@@ -382,6 +444,13 @@ export default function ScrollytellingPage({
           })}
         </div>
       </div>
+      {selectedPhoto && (
+        <PhotoPopup
+          selectedPhoto={selectedPhoto} // TS now knows this is a RoutePhoto
+          onClose={closePhotoAndResetMap}
+          onNavigate={navigatePhoto}
+        />
+      )}
     </div>
   );
 }

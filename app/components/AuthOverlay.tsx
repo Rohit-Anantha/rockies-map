@@ -21,9 +21,13 @@ export const AuthOverlay = ({
             </h2>
             <input
               type="text"
-              className="w-full px-4 py-3 rounded-xl border border-stone-400 text-center outline-none"
+              /* Ensure text-base (16px) or text-lg is used */
+              className="w-full px-4 py-3 rounded-xl border border-stone-400 text-center outline-none bg-white text-slate-900 text-base"
               onChange={(e) => onAuth(e.target.value)}
               autoFocus
+              autoCapitalize="none"
+              autoCorrect="off"
+              spellCheck="false"
             />
           </div>
         </motion.div>
