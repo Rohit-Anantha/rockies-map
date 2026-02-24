@@ -1,0 +1,22 @@
+[
+  {
+    "id": "Noah's House",
+    "day": "1",
+    "coordinates": [
+      -97.682275,
+      30.405680555555556
+    ],
+    "url": "/photos/display/Noah's House.webp",
+    "caption": "Noah's House.jpeg"
+  },
+  {
+    "id": "Ride Launch",
+    "day": "1",
+    "coordinates": [
+      -97.73963888888889,
+      30.283705555555557
+    ],
+    "url": "/photos/display/Ride Launch.webp",
+    "caption": "Ride Launch.jpeg"
+  }
+]
