@@ -158,6 +158,7 @@ export default function ScrollytellingPage({
 
     return () => observer.disconnect();
   }, [onIntersect, isAuthenticated]); // Added isAuthenticated to ensure it runs after login
+
   const activeDayNum = parseInt(activeDay) || 0;
 
   // Totals Calculation
@@ -235,6 +236,24 @@ export default function ScrollytellingPage({
       map.doubleClickZoom.enable();
     }
   }, [selectedPhoto]);
+
+  useEffect(() => {
+    if (isAuthenticated) {
+      // 1. Reset the scroll position to the very top
+      if (scrollContainerRef.current) {
+        scrollContainerRef.current.scrollTop = 0;
+      }
+
+      // 2. Fly the map to Day 1 coordinates
+      // We use a slight delay to ensure the map container has finished
+      // its entry transition/blur exit.
+      const timer = setTimeout(() => {
+        updateMapAndUI("1", 2000);
+      }, 100);
+
+      return () => clearTimeout(timer);
+    }
+  }, [isAuthenticated, updateMapAndUI]);
 
   return (
     <div className="fixed inset-0 overflow-hidden bg-slate-50 font-sans selection:bg-orange-100">

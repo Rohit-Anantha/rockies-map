@@ -77,7 +77,7 @@ export const JournalEntry = memo(
       >
         {/* Date & Day Label */}
         <div className="flex items-center justify-between mb-2">
-            <span className="text-[10px] font-black tracking-[0.2em] uppercase text-orange-500">
+          <span className="text-[10px] font-black tracking-[0.2em] uppercase text-orange-500">
             Day {day} • {formattedDate}
           </span>
           {entry?.isRestDay && (
@@ -110,49 +110,51 @@ export const JournalEntry = memo(
           </div>
         )}
 
-        {/* Weather Strip Logic (Moved to its own component or kept here) */}
         {geoProps?.weather && (
-          <div className="flex items-center gap-6 mb-8 p-4 rounded-2xl bg-slate-50 border border-slate-100 w-fit">
+          <div className="flex items-center gap-3 md:gap-5 mb-6 p-2.5 md:p-3 rounded-xl bg-slate-50/50 border border-slate-100 w-fit">
             {/* 1. Condition & Icon */}
-            <div className="flex items-center gap-3">
-              <div className="p-2 bg-white rounded-lg shadow-sm">
+            <div className="flex items-center gap-2">
+              <div className="p-1.5 bg-white rounded-md shadow-sm shrink-0">
+                {/* Pass a smaller size to your icon function if possible, e.g., size={14} */}
                 {getWeatherIcon(geoProps.weather.code)}
               </div>
-              <div className="flex flex-col">
-                <span className="text-[9px] font-bold text-slate-400 uppercase leading-none mb-1">
-                  Condition
+              <div className="flex flex-col justify-center">
+                <span className="text-[8px] font-bold text-slate-400 uppercase tracking-tight leading-none mb-0.5">
+                  Cond
                 </span>
-                <span className="text-sm font-black text-slate-700 whitespace-nowrap">
+                <span className="text-[11px] md:text-xs font-black text-slate-700 whitespace-nowrap leading-none">
                   {getWeatherDescription(geoProps.weather.code)}
                 </span>
               </div>
             </div>
 
-            <div className="h-8 w-px bg-slate-200" />
+            <div className="h-5 w-px bg-slate-200" />
 
             {/* 2. Temperatures */}
-            <div className="flex flex-col">
-              <span className="text-[9px] font-bold text-slate-400 uppercase leading-none mb-1">
-                High / Low
+            <div className="flex flex-col justify-center">
+              <span className="text-[8px] font-bold text-slate-400 uppercase tracking-tight leading-none mb-0.5">
+                Temp
               </span>
-              <span className="text-sm font-black text-slate-700">
-                {Math.round(geoProps.weather.max)}°{" "}
-                <span className="text-slate-300 font-medium">/</span>{" "}
+              <span className="text-[11px] md:text-xs font-black text-slate-700 leading-none">
+                {Math.round(geoProps.weather.max)}°
+                <span className="text-slate-300 font-medium mx-0.5">/</span>
                 {Math.round(geoProps.weather.min)}°
               </span>
             </div>
 
-            {/* 3. Precipitation (Only if it rained) */}
+            {/* 3. Precipitation */}
             {geoProps.weather.precip > 0 && (
               <>
-                <div className="h-8 w-px bg-slate-200" />
-                <div className="flex flex-col">
-                  <span className="text-[9px] font-bold text-slate-400 uppercase leading-none mb-1">
-                    Precip
+                <div className="h-5 w-px bg-slate-200" />
+                <div className="flex flex-col justify-center">
+                  <span className="text-[8px] font-bold text-slate-400 uppercase tracking-tight leading-none mb-0.5">
+                    Rain
                   </span>
-                  <span className="text-sm font-black text-blue-600">
+                  <span className="text-[11px] md:text-xs font-black text-blue-600 leading-none">
                     {geoProps.weather.precip.toFixed(2)}
-                    <span className="text-[10px] ml-0.5">in</span>
+                    <span className="text-[9px] ml-0.5 font-bold uppercase">
+                      in
+                    </span>
                   </span>
                 </div>
               </>
