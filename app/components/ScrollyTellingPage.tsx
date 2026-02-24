@@ -73,6 +73,7 @@ export default function ScrollytellingPage({
   const activeDayRef = useRef(activeDay);
   const scrollTimeout = useRef<NodeJS.Timeout | null>(null);
   const selectedPhotoRef = useRef<RoutePhoto | null>(null);
+  const isManualScrolling = useRef(false);
 
   const updateMapAndUI = useCallback((dayId: string, duration: number) => {
     setActiveDay(dayId);
@@ -108,7 +109,7 @@ export default function ScrollytellingPage({
   const onIntersect = useCallback(
     (entries: IntersectionObserverEntry[]) => {
       // Check the REF, not the state
-      if (selectedPhotoRef.current) return;
+      if (selectedPhotoRef.current || isManualScrolling.current) return;
 
       entries.forEach((entry) => {
         if (entry.isIntersecting) {
@@ -125,6 +126,7 @@ export default function ScrollytellingPage({
 
   const scrollToDay = useCallback(
     (day: string) => {
+      isManualScrolling.current = true;
       updateMapAndUI(day, 1000); // Faster map jump
 
       const element = document.querySelector(`[data-day="${day}"]`);
@@ -133,7 +135,9 @@ export default function ScrollytellingPage({
       }
 
       if (scrollTimeout.current) clearTimeout(scrollTimeout.current);
-      scrollTimeout.current = setTimeout(() => {}, 1200);
+      scrollTimeout.current = setTimeout(() => {
+        isManualScrolling.current = false;
+      }, 1200);
     },
     [updateMapAndUI],
   );
