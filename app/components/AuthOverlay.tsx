@@ -13,7 +13,7 @@ export const AuthOverlay = ({
         <motion.div
           initial={{ opacity: 1, backdropFilter: "blur(16px)" }}
           exit={{ opacity: 0, backdropFilter: "blur(0px)" }}
-          className="fixed inset-0 z-100 flex items-center justify-center bg-white/40 backdrop-blur-xl"
+          className="fixed inset-0 z-100 flex items-center justify-center bg-white/40 backdrop-blur-xl pointer-events-auto"
         >
           <div className="w-full max-w-md p-8 bg-white/80 rounded-3xl shadow-2xl border border-white/60">
             <h2 className="text-2xl font-black text-slate-900 mb-6 text-center">
