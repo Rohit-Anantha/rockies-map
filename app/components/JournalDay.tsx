@@ -8,6 +8,7 @@ import {
   CloudLightning,
 } from "lucide-react";
 import { memo } from "react";
+import Link from "next/link";
 
 const getWeatherIcon = (code: number) => {
   // Clear & Mostly Clear (0-2)
@@ -189,6 +190,15 @@ export const JournalEntry = memo(
         <div className="text-slate-500 text-lg leading-relaxed font-light italic border-l-4 border-slate-100 pl-6">
           {entry?.content || "No journal entry for this day yet."}
         </div>
+        <Link
+          href={`/day/${day}`}
+          className="ml-6 inline-flex items-center gap-2 text-xs font-black uppercase tracking-widest text-orange-500 hover:text-orange-600 transition-colors"
+        >
+          Read full story
+          <span className="transition-transform group-hover:translate-x-1">
+            →
+          </span>
+        </Link>
       </motion.section>
     );
   },

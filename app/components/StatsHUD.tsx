@@ -10,7 +10,11 @@ export const StatsHUD = ({
 }) => (
   <motion.div
     layout
-    className="absolute top-4 left-4 md:bottom-10 md:left-10 md:top-auto md:right-auto z-30 bg-white/60 backdrop-blur-md px-4 py-3 md:px-6 md:py-4 rounded-[2.5rem] border border-slate-200 shadow-xl scale-90 md:scale-100 origin-top-left md:origin-bottom-left"
+    className="absolute z-30 inset-x-0 mx-auto w-fit 
+           top-6 md:top-auto md:bottom-10
+           bg-white/80 backdrop-blur-xl border border-slate-200 shadow-xl rounded-[2.5rem]
+           px-5 py-3 md:px-8 md:py-4 
+           scale-90 md:scale-100 origin-top md:origin-bottom"
   >
     <div className="flex items-center gap-4 md:gap-8">
       <div>

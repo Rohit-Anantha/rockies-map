@@ -1,6 +1,9 @@
 import type { Metadata } from "next";
 import { Geist, Geist_Mono } from "next/font/google";
 import "./globals.css";
+import { MapProvider } from "./context/MapContext";
+import PersistentMap from "./context/PersistentMap";
+import processedPhotos from "./data/photos.json";
 
 const geistSans = Geist({
   variable: "--font-geist-sans",
@@ -21,13 +24,18 @@ export default function RootLayout({
   children,
 }: Readonly<{
   children: React.ReactNode;
-}>) {
+}>): React.ReactElement {
   return (
     <html lang="en">
       <body
         className={`${geistSans.variable} ${geistMono.variable} antialiased`}
       >
-        {children}
+        <MapProvider>
+          <PersistentMap photos={processedPhotos as any} />
+          <main className="relative z-10 w-full h-full pointer-events-none">
+            {children}
+          </main>
+        </MapProvider>
       </body>
     </html>
   );
